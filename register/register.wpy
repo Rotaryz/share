@@ -1,0 +1,407 @@
+<template>
+  <view class="logn">
+    <image class="lg-header" wx:if="{{imageUri}}"
+           src="{{imageUri + '/defaults/b-image/page/icon-default-logo@2x.png'}}"></image>
+    <image class="guidance" src="icon-login-logo@2x.png"
+           wx:if="{{guidance}}"></image>
+    <view class="lg-from">
+      <view class="mistake {{showLogo ? 'right-tip':''}}"
+            wx:if="{{showMistake}}">
+        <image
+          src="{{showLogo ? imageUri+'/defaults/b-image/page/icon-login_right@2x.png':imageUri+'/defaults/b-image/page/icon-login_prompt@2x.png'}}"></image>
+        {{mistakeTip}}
+      </view>
+      <view
+        class="lg-ch phone">
+        <view>
+          <image wx:if="{{imageUri}}"
+                 src="{{imageUri+'/defaults/b-image/page/icon-phone@2x.png'}}"
+                 class="icon"></image>
+          <input id="phones"
+                 type="number" placeholder="请输入手机号码"
+                 placeholder-class="placeholder" value="{{phoneNum}}"
+                 focus="{{phoneFocus}}"
+                 bindinput="putPhone" maxlength="11"/>
+          <view class="eye" @tap.stop="clearPhone">
+            <image class="close"
+                   src="{{imageUri + '/defaults/b-image/page/icon-del34@2x.png'}}"
+                   wx:if="{{imageUri && showClose}}"></image>
+          </view>
+
+        </view>
+        <text class="{{isSet ? 'set-code' : ''}}" @tap="setCode">{{
+          time}}
+        </text>
+      </view>
+      <view class="lg-ch" wx:if="{{register || forget}}">
+        <image class="icon" wx:if="{{imageUri}}"
+               src="{{imageUri + '/defaults/b-image/page/icon-code@2x.png'}}"></image>
+        <input type="number" placeholder="请输入6位验证码"
+               placeholder-class="placeholder" value="{{code}}"
+               bindinput="getCode"/>
+      </view>
+      <view class="password lg-ch">
+        <view class="ciphertext">
+          <image class="icon" wx:if="{{imageUri}}"
+                 src="{{imageUri+'/defaults/b-image/page/icon-password@2x.png'}}"></image>
+          <input type="{{ciphertext ? 'text' : 'password'}}"
+                 placeholder="密码(6-16位数字或字母)"
+                 placeholder-class="placeholder" bindinput="putPassword"
+                 maxlength="18" value="{{password}}" focus="{{isfocus}}"/>
+          <view class="eye" @tap="showCiphertext">
+            <image class="close" wx:if="{{imageUri}}"
+                   src="{{ciphertext ? imageUri + '/defaults/b-image/page/icon-display@2x.png' : imageUri + '/defaults/b-image/page/icon-hide@2x.png'}}"></image>
+          </view>
+
+        </view>
+      </view>
+      <button class="{{submit ? '' : 'disable'}}" @tap="submit({{submitType}})">
+        注册
+      </button>
+    </view>
+
+    <Toast></Toast>
+  </view>
+</template>
+
+<script>
+  import wepy from 'wepy'
+  import users from 'common/mixins/users'
+  import logIn from 'api/logIn'
+  import base from 'common/mixins/base'
+  import Toast from '@/base/toast/toast'
+  import URIS from 'common/js/config'
+  import {ERR_OK} from 'api/base'
+
+  let REGPASS = /^[a-zA-Z0-9]{6,18}$/
+  let REGPHONE = /^1[3|4|5|7|8][0-9]{9}$/
+  export default class Square extends wepy.page {
+    mixins = [users, base]
+    config = {
+      navigationBarTitleText: '集客商家助手',
+      navigationBarBackgroundColor: '#fff',
+      navigationBarTextStyle: 'black'
+    }
+    components = {
+      Toast: Toast
+    }
+    data = {
+      imageUri: URIS.image,
+      guidance: false,
+      submitDisabled: false,
+      phoneNum: '',
+      phoneSusses: '',
+      password: '',
+      submitType: 1,
+      anPassword: '',
+      ciphertext: false,
+      code: '',
+      forget: false,
+      login: true,
+      register: true,
+      submit: false,
+      time: '获取验证码',
+      showClose: false,
+      isfocus: false,
+      tapCode: true,
+      showMistake: false,
+      mistakeTip: '',
+      showLogo: false,
+      isSet: false,
+      phoneFocus: false
+    }
+
+    onShareAppMessage() {
+      this.ShareAppMessage()
+    }
+
+//      判断是否可登陆
+    checkAngin() {
+      if (REGPHONE.test(this.phoneNum) && REGPASS.test(this.password) &&
+        this.code.length === 6) {
+        this.submit = true
+      } else {
+        this.submit = false
+      }
+
+      this.checkTip()
+    }
+
+//    显示停留提示
+    showTip(status, title) {
+      this.showMistake = status
+      this.mistakeTip = title
+      this.showLogo = false
+      return false
+    }
+
+//  提示闪现
+    rightTip(content, showLogo = true) {
+      this.mistakeTip = content
+      this.showLogo = showLogo
+      this.showMistake = true
+      setTimeout(() => {
+        this.showMistake = false
+        this.$apply()
+      }, 2000)
+      this.$apply()
+    }
+
+//  检测是否可注册
+    checkTip() {
+      let phoneStatus = REGPHONE.test(this.phoneNum)
+      let passStatus = REGPASS.test(this.password)
+      if ((this.phoneNum.length < 11 && this.password.length < 6) || (phoneStatus && passStatus) || (passStatus && this.password.length >= 6 && phoneStatus) || (!passStatus && this.password.length < 6 && phoneStatus)) {
+        this.showTip(false, '')
+      } else if (!phoneStatus && this.phoneNum.length === 11) {
+        this.showTip(true, '请输入正确的手机号码')
+      } else if (!passStatus && this.password.length >= 6) {
+        this.showTip(true, '请输入6-18位数字或字母的密码')
+      }
+      this.$apply()
+    }
+
+    methods = {
+//      输入手机号码
+      putPhone(e) {
+        this.phoneNum = e.detail.value
+        this.showClose = e.detail.value.length > 0
+        this.isSet = REGPHONE.test(this.phoneNum) && this.tapCode
+        this.checkAngin()
+      },
+//      清除手机号码
+      clearPhone() {
+        this.phoneNum = ''
+        this.phoneSusses = ''
+        this.phoneFocus = false
+        setTimeout(() => {
+          this.phoneFocus = true
+          this.$apply()
+        }, 30)
+
+        this.showClose = false
+        this.showMistake = false
+        this.checkAngin()
+      },
+//      密码可视化
+      showCiphertext() {
+        this.ciphertext = !this.ciphertext
+        setTimeout(() => {
+          this.isfocus = true
+          this.$apply()
+        }, 30)
+        setTimeout(() => {
+          this.isfocus = false
+          this.$apply()
+        }, 20)
+      },
+//      点击获取验证码
+      async setCode() {
+        let regPhone = /^1[3|4|5|7|8][0-9]{9}$/
+        if (this.phoneNum === '') {
+          this.showTip(true, '请输入手机号码')
+//          this.$invoke('Toast', 'show', '请输入手机号码')
+          return false
+        } else if (!regPhone.test(this.phoneNum)) {
+          this.showTip(true, '请输入正确的手机号码')
+//          this.$invoke('Toast', 'show', '请输入正确的手机号码')
+          return false
+        }
+        let data = {}
+        if (this.forget) {
+          data = {mobile: this.phoneNum}
+        } else {
+          data = {mobile: this.phoneNum, register: 1}
+        }
+        if (this.tapCode) {
+          let codeData = await logIn.messageBind(data)
+          this.time = '发送中…'
+//          this.$invoke('Toast', 'show', codeData.message)
+          this.loaded()
+          if (codeData.error !== ERR_OK) {
+            this.time = '获取验证码'
+            this.rightTip(codeData.message, false)
+          } else {
+            this.isSet = false
+            this.rightTip(codeData.message)
+            let time = 60
+            this.time = time + 's'
+            let timer = setInterval(() => {
+              this.tapCode = false
+              time--
+              this.time = time + 's'
+              this.$apply()
+              if (time <= 0) {
+                this.time = '获取验证码'
+                this.tapCode = true
+                if (REGPHONE.test(this.phoneNum)) {
+                  this.isSet = true
+                } else {
+                  this.isSet = false
+                }
+                this.$apply()
+                clearInterval(timer)
+              }
+            }, 1000)
+          }
+        } else {
+          return false
+        }
+      },
+//      密码输入
+      putPassword(e) {
+        this.password = e.detail.value
+        this.password = this.password.replace(/[\u2E80-\u9FFF]/gi, '')
+        this.$apply()
+        this.checkAngin()
+        return this.password
+      },
+//    获取验证码
+      getCode(e) {
+        this.code = e.detail.value
+        this.checkAngin()
+      },
+//      注册
+      async submit() {
+        let data = await wepy.login()
+        if (this.submit) {
+//            注册
+          let res = await logIn.register({
+            mobile: this.phoneNum,
+            password: this.password,
+            code: this.code,
+            wx_code: data.code
+          })
+          this.loaded()
+          if (res.error === ERR_OK) {
+            wepy.setStorageSync('token', res.data.access_token)
+            wepy.setStorageSync('is_leader',
+              res.data.merchant_info.merchant_data.is_leader)
+            wepy.setStorageSync('is_parent',
+              res.data.merchant_info.is_parent)
+            this.rightTip('注册成功')
+            setTimeout(async () => {
+              await wepy.switchTab({
+                url: '/pages/shop/shop'
+              })
+            }, 1000)
+          } else {
+            this.rightTip(res.message, false)
+          }
+        }
+      }
+    }
+  }
+</script>
+
+<style lang="stylus">
+  @import "../../common/stylus/variable"
+  @import "../../common/stylus/mixin"
+  page
+    background: $color-white
+    font-family: $font-family-light
+
+  .logn
+    text-align: center
+    padding: 23px $padding 0
+
+  /*正常*/
+  .lg-header, .guidance
+    width: 64px
+    height: 64px
+    margin-bottom: 25px
+
+  /*引导*/
+  .guidance
+    width: 47.5px
+    height: 40px
+
+  .lg-from
+    position: relative
+    .mistake
+      position: absolute
+      row-center()
+      top: -12px
+      color: $color-assist-tr
+      font-size: $font-size-small
+      text-align: center
+      width: 100%
+      image
+        height: 12px
+        width: 12px
+        transform: translateY(2px)
+    .right-tip
+      color: $color-theme
+    .lg-ch
+      position: relative
+      border-bottom: 0.5px solid $color-split-line
+      image
+        position: absolute
+        col-center()
+        width: 18px
+        height: 18px
+      .icon
+        left: 0
+      .eye
+        position: absolute
+        height: 100%
+        width: 18%
+        right: 0
+        top: 0
+        z-index: 150
+        .close
+          right: 10px
+      input
+        text-align: left
+        height: 64px
+        padding-left: 29.5px
+        font-size: ($font-size-medium - 1)
+        color: #363547
+        width: 70%
+      wx-input
+        width: 72%
+        overflow: visible
+      .phone
+        width: 75%
+      .error
+        color: $color-assist-f
+      .placeholder
+        color: $color-text-gray
+    .error-fa
+      border-bottom: 0.5px solid $color-assist-f
+    .phone
+      display: flex
+      align-items: center
+      #phones
+        width: 66%
+      view
+        position: relative
+        flex: 7.5
+        border-bottom: none
+      text
+        flex: 3
+        border-left: 0.5px solid $color-split-line
+        font-size: $font-size-medium
+        color: $color-text-gray
+        line-height: 24px
+      .set-code
+        color: $color-theme
+    button
+      margin-top: 20px
+      background: $color-theme
+      color: $color-white
+      border-radius: 0px
+      font-size: $font-size-medium-x
+      height: 44px
+      &::after
+        border: 1px solid rgba(0, 0, 0, 0)
+    .disable
+      background: $color-mask-bgc
+    .tip
+      font-size: $font-size-small
+      color: #333
+      height: 30px
+      display: flex
+      justify-content: space-between
+      margin-top: 17px
+</style>
